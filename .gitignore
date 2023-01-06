@@ -54,3 +54,8 @@ fastlane/FastlaneRunner
 *.env
 .bundle
 vendor
+scummvm-ios7-libs-v2/*
+!scummvm-ios7-libs-v2.zip
+_MACOSX
+scummvm
+build

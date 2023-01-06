@@ -1,0 +1,118 @@
+default_platform(:ios)
+opt_out_usage
+
+DEVELOPER_APP_ID = ENV["DEVELOPER_APP_ID"]
+DEVELOPER_APP_IDENTIFIER = ENV["DEVELOPER_APP_IDENTIFIER"]
+PROVISIONING_PROFILE_SPECIFIER = ENV["PROVISIONING_PROFILE_SPECIFIER"]
+TEMP_KEYCHAIN_USER = ENV["TEMP_KEYCHAIN_USER"]
+TEMP_KEYCHAIN_PASSWORD = ENV["TEMP_KEYCHAIN_PASSWORD"]
+APPLE_ISSUER_ID = ENV["APPLE_ISSUER_ID"]
+APPLE_KEY_ID = ENV["APPLE_KEY_ID"]
+APPLE_KEY_CONTENT = ENV["APPLE_KEY_CONTENT"]
+GIT_AUTHORIZATION = ENV["GIT_AUTHORIZATION"]
+
+def delete_temp_keychain(name)
+  delete_keychain(
+    name: name
+  ) if File.exist? File.expand_path("~/Library/Keychains/#{name}-db")
+end
+
+def create_temp_keychain(name, password)
+  create_keychain(
+    name: name,
+    password: password,
+    unlock: false,
+    timeout: 0
+  )
+end
+
+def ensure_temp_keychain(name, password)
+  delete_temp_keychain(name)
+  create_temp_keychain(name, password)
+end
+
+platform :ios do
+  lane :prepare_xcode_project do
+    # clone scummvm 2.6
+    system("git clone --depth 1 -b branch-2-6 https://github.com/scummvm/scummvm.git ../scummvm")
+
+    # extract ios libs
+    system("sh -c \"mkdir ../build\"")
+    system("sh -c \"unzip ../scummvm-ios7-libs-v2.zip\"")
+    system("sh -c \"cp -r ./scummvm-ios7-libs-v2/* ../build/\"")
+    system("sh -c \"rm -rf ./scummvm-ios7-libs-v2\"")
+    system("sh -c \"rm -rf ./__MACOSX\"")
+
+    # generate xcode project
+    system("sh -c \"cd ../scummvm/devtools/create_project/xcode && xcodebuild\"")
+    system("sh -c \" cd ../build && ../scummvm/devtools/create_project/xcode/build/Release/create_project ../scummvm --xcode --enable-fluidsynth --disable-nasm --disable-opengl --disable-theoradec --disable-mpeg2 --disable-taskbar --disable-tts --disable-fribidi\"")
+
+    # copy app icons
+    system("sh -c \"cp -r ../AppIcon.appiconset ../scummvm/dists/ios7/Images.xcassets/\"")
+
+    # copy schemes
+    system("sh -c \"cp -r ../schemes/* ../build/scummvm.xcodeproj/\"")
+    system("sh -c \"cp -r ../Info.plist ../scummvm/dists/ios7/\"")
+  end
+
+  lane :closed_beta do
+    prepare_xcode_project
+
+    keychain_name = TEMP_KEYCHAIN_USER
+    keychain_password = TEMP_KEYCHAIN_PASSWORD
+    ensure_temp_keychain(keychain_name, keychain_password)
+
+    api_key = app_store_connect_api_key(
+      key_id: APPLE_KEY_ID,
+      issuer_id: APPLE_ISSUER_ID,
+      key_content: APPLE_KEY_CONTENT,
+      duration: 1200,
+      in_house: false
+    )
+
+    increment_build_number(xcodeproj: "./build/scummvm.xcodeproj", skip_info_plist: true)
+
+    match(
+      type: 'appstore',
+      app_identifier: ["#{DEVELOPER_APP_IDENTIFIER}"],
+      git_basic_authorization: Base64.strict_encode64(GIT_AUTHORIZATION),
+      readonly: true,
+      keychain_name: keychain_name,
+      keychain_password: keychain_password,
+      api_key: api_key
+    )
+
+    gym(
+      configuration: "Release",
+      workspace: "./build/scummvm.xcodeproj/project.xcworkspace",
+      scheme: "ScummVM-iOS",
+      export_method: "app-store",
+      export_options: {
+        provisioningProfiles: {
+            DEVELOPER_APP_ID => PROVISIONING_PROFILE_SPECIFIER
+        }
+      }
+    )
+
+    pilot(
+      apple_id: "#{DEVELOPER_APP_ID}",
+      app_identifier: "#{DEVELOPER_APP_IDENTIFIER}",
+      skip_waiting_for_build_processing: false,
+      skip_submission: true,
+      distribute_external: false,
+      notify_external_testers: false,
+      ipa: "scummvm.ipa"
+    )
+
+    delete_temp_keychain(keychain_name)
+
+    # update project.pbxproj in the repo
+    system("sh -c \"cp ../build/scummvm.xcodeproj/project.pbxproj ../schemes/project.pbxproj\"")
+
+    # cleanup
+    system("sh -c \"rm -rf ../build\"")
+    system("sh -c \"rm -rf ../scummvm\"")
+    system("sh -c \"rm -rf ../scummvm.app.dSYM.zip\"")
+    system("sh -c \"rm -rf ../scummvm.ipa\"")
+  end
+end
