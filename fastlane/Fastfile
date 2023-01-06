@@ -93,7 +93,7 @@ platform :ios do
             DEVELOPER_APP_ID => PROVISIONING_PROFILE_SPECIFIER
         }
       },
-      xcargs: "BUILD_VERSION='#{@build_number}'"
+      xcargs: "BUILD_VERSION=#{@build_number}"
     )
 
     pilot(
