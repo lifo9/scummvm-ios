@@ -71,7 +71,7 @@ platform :ios do
     )
 
     @build_number = latest_testflight_build_number(app_identifier: "#{DEVELOPER_APP_IDENTIFIER}") + 1
-    increment_build_number(xcodeproj: "./build/scummvm.xcodeproj", skip_info_plist: true, build_number: @build_number)
+    increment_build_number(xcodeproj: "./build/scummvm.xcodeproj", build_number: @build_number)
 
     match(
       type: 'appstore',
@@ -91,7 +91,11 @@ platform :ios do
       export_options: {
         provisioningProfiles: {
             DEVELOPER_APP_ID => PROVISIONING_PROFILE_SPECIFIER
-        }
+        },
+        compileBitcode: false,
+        uploadBitcode: false,
+        uploadSymbols: true,
+        manageAppVersionAndBuildNumber: false
       },
       xcargs: "BUILD_VERSION=#{@build_number}"
     )
