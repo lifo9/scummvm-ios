@@ -23,6 +23,14 @@ For _fastlane_ installation instructions, see [Installing _fastlane_](https://do
 
 
 
+### ios cleanup
+
+```sh
+[bundle exec] fastlane ios cleanup
+```
+
+
+
 ### ios closed_beta
 
 ```sh
